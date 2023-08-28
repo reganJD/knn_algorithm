@@ -1,0 +1,16 @@
+ingredient,sweetness,crunchiness,type
+apple,10,9,fruit
+bacon,1,4,protein
+banana,10,1,fruit
+carrot,7,10,vegetable
+celery,3,10,vegetable
+cheese,1,1,protein
+lettuce,1,9,vegetable
+cucumber,2,8,vegetable
+green bean,4,7,vegetable
+nuts,4,6,protein
+shrimp,2,3,protein
+fish,4,1,protein
+pear,10,6,fruit
+grape,9,6,fruit
+orange,8,3,fruit

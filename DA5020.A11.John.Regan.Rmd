@@ -1,0 +1,372 @@
+---
+title: "DA5020.A11.John.Regan.Rmd"
+author: "Regan, JD"
+date: "`r Sys.Date()`"
+output:
+  github_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r,message=FALSE,echo=FALSE}
+# library load
+#install.packages('class')
+#install.packages('caret')
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(scales)
+library(knitr)
+#knit2html('DA5020.A11.John.Regan.html')
+```
+
+
+## DA5020 – Assignment 11\
+This assignment provides you with an opportunity to implement the kNN algorithm and identify suitable values of k. In this exercise you will build a k-nearest neighbor classifier to predict the onset of diabetes using the Pima Indians Diabetes Database. The dataset contains the following explanatory variables: number of pregnancies, glucose, blood pressure, skin thickness, insulin, BMI, diabetes pedigree function and age. The response variable is Outcome, which indicates whether or not the patient has diabetes.\
+
+Question 1 — (5 points)\
+Load the diabetes dataset “diabetes.csv”, inspect the data and gather any relevant summary statistics.\
+
+```{r}
+diab <- read_csv("diabetes.csv")
+
+#checking for na values
+colSums(is.na(diab))
+
+summary(diab)
+str(diab)
+
+```
+
+**Answer: We can see that all the variables are continuous, which is a nice perk initially. The only factor we have is outcome, which is already set to 0/1. There are also no missing or NA values, so the data set is very clean.**
+
+---
+
+Question 2 — (5 points)\
+Normalize the explanatory variables using min-max normalization.\
+
+```{r}
+# pregnancies
+min.preg <- min(diab$Pregnancies)
+max.preg <- max(diab$Pregnancies)
+diab$preg = (diab$Pregnancies - min.preg)/(max.preg- min.preg)
+
+# glucose
+min.gluc <- min(diab$Glucose)
+max.gluc <- max(diab$Glucose)
+diab$gluc = (diab$Glucose - min.gluc)/(max.gluc- min.gluc)
+
+# bloodpressure
+min.bp <- min(diab$BloodPressure)
+max.bp <- max(diab$BloodPressure)
+diab$bp = (diab$BloodPressure - min.bp)/(max.bp- min.bp)
+
+# skinthickness
+min.skin <- min(diab$SkinThickness)
+max.skin <- max(diab$SkinThickness)
+diab$skin = (diab$SkinThickness - min.skin)/(max.skin- min.skin)
+
+# insulin
+min.ins <- min(diab$Insulin)
+max.ins <- max(diab$Insulin)
+diab$ins = (diab$Insulin - min.ins)/(max.ins- min.ins)
+
+# BMI
+min.bmi <- min(diab$BMI)
+max.bmi <- max(diab$BMI)
+diab$bmi = (diab$BMI - min.bmi)/(max.bmi- min.bmi)
+
+# diabetespedigreefunction
+min.ped <- min(diab$DiabetesPedigreeFunction)
+max.ped <- max(diab$DiabetesPedigreeFunction)
+diab$ped = (diab$DiabetesPedigreeFunction - min.ped)/(max.ped- min.ped)
+
+# age
+min.years <- min(diab$Age)
+max.years <- max(diab$Age)
+diab$years = (diab$Age - min.years)/(max.years- min.years)
+```
+
+**Answer: I utilized the min/max normalization to normalize all of the independent variables on a 0 to 1 scale. **
+
+---
+
+Question 3 — (5 points)\
+Split the data into a training set and a test set i.e. perform an 80/20 split; 80% of the data should be designated as the training data and 20% as the test data.\
+
+```{r}
+set.seed(1)
+diab.train <- sample(1:nrow(diab),nrow(diab)*0.8)
+diab.test <- setdiff(1:nrow(diab),diab.train)
+
+# create the training and testing sample data frames
+diab.trainset <- diab[diab.train,]
+diab.testset <- diab[diab.test,]
+
+# removed normal values, only normalized 
+
+diab.testset <- diab.testset[-(1:8)]
+diab.trainset <- diab.trainset[-(1:8)]
+
+```
+
+**Answer: I utilized a random sample of rows to select for approximately 80% of the rows in the diabetes csv to be put into the training set data.frame and the rest in the testing set data.frame. **
+
+---
+
+Question 4 — (25 points)\
+Create a function called knn_predict(). The function should accept the following as input: the training set, the test set and the value of k. For example knn_predict(train.data, test.data, k).\
+
+• Implement the logic for the k-nn algorithm from scratch (without using any libraries). There is an example in the lecture series on Canvas. The goal of your k-nn algorithm is to predict the Outcome (i.e. whether or not the patient has diabetes) using the explanatory variables.\
+
+• The function should return a list/vector of predictions for all observations in the test set.\
+
+```{r}
+# to find k which is ~25
+sqrt(614)
+sqrt(154)
+sqrt(768)
+
+## kdist distance function ================================================================
+kdist <- function(p,q){
+    d <- 0
+  for (i in 1:length(p)){
+    d <- d + (p[i] - q[i])^2
+  }
+  kdist <- sqrt(d)
+}
+
+#testing while building functions to ensure correct
+# tests first test against second row of training set
+#p <- as.numeric(diab.testset[1,c(2:9)])
+#p
+#q <- as.numeric(diab.trainset[2,c(2:9)])
+#q
+#test1 <- kdist(p,q)
+#test1
+
+## kneighbors ================================================================
+kneighbors <- function(train,u,tstrw){
+  m <- nrow(train)
+  ds <- numeric(m)
+  q <- as.numeric(u[tstrw,c(2:9)])
+  for (i in 1:m){
+    p <- train[i,c(2:9)]
+    #q <- u[i,c(2:9)]
+    ds[i] <- kdist(p,q)
+  }
+  # acheived the unlisting
+  kneighbors <- unlist(ds)
+  #kneighbors <- ds
+}
+
+#testing while building functions to ensure correct
+tk <- kneighbors(diab.trainset,diab.testset,1)
+tk
+otk <- order(tk)
+ktest <- 25
+otk[1:ktest]
+
+
+## k closest function ================================================================
+kclosest <- function(neighbors,k){
+  ordered.neighbors <- order(neighbors)
+  k.closest <- ordered.neighbors[1:k]
+}
+
+#testing while building functions to ensure correct
+tkclos <- kclosest(tk,25)
+tkclos
+
+## kmode function ================================================================
+kmode <- function(x){
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x,ux)))]
+}
+
+#testing while building functions to ensure correct
+kmode(tkclos)
+diab.trainset$Outcome[tkclos]
+# predicts the outcome of the first row of the testing set
+kmode(diab.trainset$Outcome[tkclos])
+
+
+## k nearest numbers function ================================================================
+# this predicts 1 number
+knn_predict <- function(train, u, k){
+  nb <- kneighbors(train, u, 1)
+  f <- kclosest(nb, k)
+  knn <- kmode(train$Outcome[f])
+}
+
+#test 
+nn <- knn_predict(diab.trainset, diab.testset, 25)
+nn
+
+
+## k nearest numbers function ================================================================
+## k nearest numbers function ================================================================
+#testing while building functions to ensure correct
+knn_pred_all <- function(train, u, k){
+  ru <- nrow(u)
+  run <- numeric(ru)
+  for (i in 1:ru){
+    nb <- kneighbors(train, u, i)
+    f <- kclosest(nb, k)
+    knn <- kmode(train$Outcome[f])  
+    run[i] <- knn
+  } 
+  knn_pred_all <- run
+}
+
+#test
+nnar <- knn_pred_all(diab.trainset, diab.testset, 25)
+nnar
+```
+
+**Answer: Above is a long continuous process of building the functions just as we did in the learning module. I built helper functions: kdist, kneighbors, kclosest, and kmode. These helped me achieve writing a function knn_pred_all that loops through the test data frame, the training data frame, calculates the knn for each test value related to all training data points and outputs a vector of the decisions.**
+
+---
+
+Question 5 — (10 points)\
+Demonstrate that the knn_predict() function works and use it to make predictions for the test set. You can determine a suitable value of k for your demonstration. After which, analyze the results that were returned from the function using a confusion matrix. Explain the results. Note: refer to the ‘Useful Resources’ section for more information on building a confusion matrix in R.\
+
+```{r}
+# Below I simply just call the function I crafted in question 4
+#nnar <- knn_pred_all(diab.trainset, diab.testset, 25)
+nnar
+
+# here I added the vector as a column to my test set just to be able to compare manually to the actual outcomes. 
+diab.testset$knn25 <- nnar
+diab.testset %>% 
+  select(Outcome,knn25)
+
+# confusion matrix for k=25
+k25nncm <- confusionMatrix(data = as.factor(diab.testset$knn25), reference = as.factor(diab.testset$Outcome))
+k25nncm
+```
+
+**Answer: I chose to use the square root of the amount of training data points which ended up being around 25. I added the vector to my test data frame and built a confusion matrix against the true values. It appears my knn algorithm and model has a 76.62 % accuracy rate with a significant pvalue. I belive this to be statistically acceptable. However, this depends on the severity of consequences of the decision that this data helps make. This is about risk factors for predicting diabetes. While this is more important than other things in life, I would ideally like to see a higher accuracy rate. However, we hare over 3/4 accurate which is much better than a guess. **
+
+---
+
+Question 6 — (+5 bonus points)\
+Repeat question 5 and perform an experiment using different values of k. Ensure that you try at least 5 different values of k and display the confusion matrix from each attempt. Which value of k produced the most accurate predictions?\
+
+```{r}
+## k == 50 ---------------------------------------------------
+knn50 <- knn_pred_all(diab.trainset, diab.testset, 50)
+# added to df
+diab.testset$knn50 <- knn50
+#k50 confusion matrix
+k50nncm <- confusionMatrix(data = as.factor(diab.testset$knn50), reference = as.factor(diab.testset$Outcome))
+k50nncm
+
+## k == 49 ---------------------------------------------------
+knn49 <- knn_pred_all(diab.trainset, diab.testset, 49)
+# added to df
+diab.testset$knn49 <- knn49
+#k50 confusion matrix
+k49nncm <- confusionMatrix(data = as.factor(diab.testset$knn49), reference = as.factor(diab.testset$Outcome))
+k49nncm
+
+
+## k == 10  ---------------------------------------------------
+knn10 <- knn_pred_all(diab.trainset, diab.testset, 10)
+# added to df
+diab.testset$knn10 <- knn10
+#k50 confusion matrix
+k10nncm <- confusionMatrix(data = as.factor(diab.testset$knn10), reference = as.factor(diab.testset$Outcome))
+k10nncm
+
+## k == 9  ---------------------------------------------------
+knn9 <- knn_pred_all(diab.trainset, diab.testset, 9)
+# added to df
+diab.testset$knn9 <- knn9
+#k50 confusion matrix
+k9nncm <- confusionMatrix(data = as.factor(diab.testset$knn9), reference = as.factor(diab.testset$Outcome))
+k9nncm
+
+
+
+## k == 15 ---------------------------------------------------
+knn15 <- knn_pred_all(diab.trainset, diab.testset, 15)
+# added to df
+diab.testset$knn15 <- knn15
+#k50 confusion matrix
+k15nncm <- confusionMatrix(data = as.factor(diab.testset$knn15), reference = as.factor(diab.testset$Outcome))
+k15nncm
+
+
+## k == 40 ---------------------------------------------------
+knn40 <- knn_pred_all(diab.trainset, diab.testset, 40)
+# added to df
+diab.testset$knn40 <- knn40
+#k50 confusion matrix
+k40nncm <- confusionMatrix(data = as.factor(diab.testset$knn40), reference = as.factor(diab.testset$Outcome))
+k40nncm
+
+## k == 35 ---------------------------------------------------
+knn35 <- knn_pred_all(diab.trainset, diab.testset, 35)
+# added to df
+diab.testset$knn35 <- knn35
+#k50 confusion matrix
+k35nncm <- confusionMatrix(data = as.factor(diab.testset$knn35), reference = as.factor(diab.testset$Outcome))
+k35nncm
+
+
+## k == 5 ---------------------------------------------------
+knn5 <- knn_pred_all(diab.trainset, diab.testset, 5)
+# added to df
+diab.testset$knn5 <- knn5
+#k50 confusion matrix
+k5nncm <- confusionMatrix(data = as.factor(diab.testset$knn5), reference = as.factor(diab.testset$Outcome))
+k5nncm
+
+## k == 75 ---------------------------------------------------
+knn75 <- knn_pred_all(diab.trainset, diab.testset, 75)
+# added to df
+diab.testset$knn75 <- knn75
+#k50 confusion matrix
+k75nncm <- confusionMatrix(data = as.factor(diab.testset$knn75), reference = as.factor(diab.testset$Outcome))
+k75nncm
+
+## k == 13 ---------------------------------------------------
+knn13 <- knn_pred_all(diab.trainset, diab.testset, 13)
+# added to df
+diab.testset$knn13 <- knn13
+#k50 confusion matrix
+k13nncm <- confusionMatrix(data = as.factor(diab.testset$knn13), reference = as.factor(diab.testset$Outcome))
+k13nncm
+
+
+## visualize results --------------------------------------------
+knum <- c(5, 9, 10, 13, 15, 25, 35, 40, 49, 50, 75)
+kacc <- c()
+kprc <- c()
+krec <- c()
+
+kacc[1] <- k5nncm$overall['Accuracy']
+kacc[2] <- k9nncm$overall['Accuracy']
+kacc[3] <- k10nncm$overall['Accuracy']
+kacc[4] <- k13nncm$overall['Accuracy']
+kacc[5] <- k15nncm$overall['Accuracy']
+kacc[6] <- k25nncm$overall['Accuracy']
+kacc[7] <- k35nncm$overall['Accuracy']
+kacc[8] <- k40nncm$overall['Accuracy']
+kacc[9] <- k49nncm$overall['Accuracy']
+kacc[10] <- k50nncm$overall['Accuracy']
+kacc[11] <- k75nncm$overall['Accuracy']
+
+# create a data frame for ease of use
+knn_stat <- data.frame(knum,kacc)
+
+# ggplot to visualize the accuracy and the k value for our knn model
+ggplot(knn_stat, aes(x=knum, y=kacc)) + geom_line() + geom_point() + ylab("Totaly Accuracy") + xlab("K Value") + ggtitle("K Values vs Model Accuracy") + scale_x_continuous(n.breaks = 15)
+```
+
+**Answer: I found the results of the kvalues to be surprising. After reading more in the text I found that I should make the k value odd so there are no ties when the voting takes place. I repeated all the larger k numbers with similar odd numbers.  After noticing the peak at 50, I decided to go much higher, although computationally expensive, and aware that it is unreasonably high, I just wanted to see what would happen. Since the square root of our training data is around 25, which seems to be ubiquitously recommended as the desired k value, I believe it would be somewhere around that number. However, we see a peak in accurary around 10. I decided to run again with k=13 to see what was happening around that area. I think that the k value, although peaking at 50, would be a mistake as large k values can lead to underfitting but small k values can lead to overfitting. We do find a valley right at the square root of the training data and perhaps that is the best since the accuracy is still relatively high but not peaked, indicating some other issues are occuring.  **
+
+---
+
+
